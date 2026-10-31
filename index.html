@@ -3,10 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Signal 号码查重系统 - 权限管控版</title>
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <meta name="apple-mobile-web-app-title" content="号码查重">
+  <title>Signal 号码追溯与防撞系统</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     :root {
@@ -43,7 +40,9 @@
     .header { display: flex; justify-content: space-between; align-items: center; }
     h1 { font-size: 1.25rem; font-weight: 700; }
     h2 { font-size: 1rem; margin-bottom: 12px; color: #334155; font-weight: 600; }
-    .input-row { display: flex; gap: 8px; margin-bottom: 8px; }
+    .form-group { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+    label { font-size: 0.85rem; font-weight: 600; color: #475569; }
+    .input-row { display: flex; gap: 8px; }
     input[type="text"], input[type="email"], input[type="password"], input[type="date"], textarea {
       width: 100%;
       background: #fff;
@@ -54,7 +53,7 @@
       outline: none;
     }
     input:focus, textarea:focus { border-color: var(--accent); }
-    textarea { height: 95px; font-family: monospace; resize: vertical; line-height: 1.4; }
+    textarea { height: 120px; font-family: monospace; resize: vertical; line-height: 1.4; }
     button {
       background: var(--accent);
       color: #fff;
@@ -64,7 +63,6 @@
       font-weight: 600;
       border-radius: 8px;
       cursor: pointer;
-      white-space: nowrap;
     }
     button.btn-sec { background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; }
     button:active { opacity: 0.85; }
@@ -83,19 +81,11 @@
       border-radius: 8px;
       display: none;
       font-size: 0.95rem;
-      line-height: 1.5;
+      line-height: 1.6;
     }
     .res-collision { background: var(--danger-bg); border: 1px solid #f87171; color: var(--danger); }
     .res-safe { background: var(--success-bg); border: 1px solid #4ade80; color: var(--success); }
     .res-warn { background: var(--warning-bg); border: 1px solid #fcd34d; color: var(--warning); }
-    .msg-banner {
-      padding: 14px;
-      border-radius: 8px;
-      margin-bottom: 12px;
-      font-size: 0.95rem;
-      line-height: 1.5;
-    }
-    .msg-wait { background: #fefce8; border: 1px solid #fef08a; color: #854d0e; }
     .hidden { display: none !important; }
   </style>
 </head>
@@ -103,68 +93,69 @@
 
 <div class="container">
 
-  <!-- 1. 登录与注册卡片 -->
+  <!-- 登录卡片 -->
   <div id="authSection" class="card">
-    <h2 id="authTitle">🔑 用户登录 / 注册</h2>
+    <h2>🔑 用户登录</h2>
     <div style="display: flex; flex-direction: column; gap: 10px;">
       <input type="email" id="authEmail" placeholder="输入邮箱账号" />
-      <input type="password" id="authPassword" placeholder="输入密码 (至少6位)" />
-      <div style="display: flex; gap: 8px; margin-top: 4px;">
-        <button id="btnLogin" style="flex: 1;" onclick="handleLogin()">登 录</button>
-        <button id="btnRegister" class="btn-sec" style="flex: 1;" onclick="handleRegister()">申请注册</button>
-      </div>
-      <div id="authFeedback" style="font-size: 0.85rem; color: var(--danger); margin-top: 4px;"></div>
+      <input type="password" id="authPassword" placeholder="输入密码" />
+      <button id="btnLogin" onclick="handleLogin()">登 录</button>
+      <div id="authFeedback" style="font-size: 0.85rem; color: var(--danger);"></div>
     </div>
   </div>
 
-  <!-- 2. 等待管理员审批界面 -->
+  <!-- 审核中提示 -->
   <div id="pendingSection" class="card hidden">
-    <div class="msg-banner msg-wait">
-      ⏳ <strong>账号待审核</strong><br>
-      您的账号已提交注册，已锁定为只读隔离状态。<br>
-      请联系主控管理员为您开通权限，开通后<strong>刷新本页面</strong>即可正常使用。
+    <div style="color: #854d0e; background: #fefce8; padding: 12px; border-radius: 8px; line-height: 1.5;">
+      ⏳ <strong>账号审核中</strong><br>
+      请联系主控开通权限后刷新。
     </div>
-    <div style="display: flex; justify-content: space-between; align-items: center;">
-      <span id="pendingUserText" style="font-size: 0.85rem; color: var(--muted);"></span>
-      <button class="btn-sec" onclick="handleLogout()">退出当前账号</button>
-    </div>
+    <button class="btn-sec" style="margin-top: 10px;" onclick="handleLogout()">退出</button>
   </div>
 
-  <!-- 3. 主操作工作台 (已授权用户可见) -->
+  <!-- 主业务界面 -->
   <div id="appSection" class="hidden" style="display: flex; flex-direction: column; gap: 16px;">
     <div class="header">
       <div>
-        <h1>Signal 号码防撞库</h1>
+        <h1>Signal 号码查重系统</h1>
         <span id="currentUserEmail" style="font-size: 0.82rem; color: var(--muted);"></span>
       </div>
       <div style="display: flex; gap: 8px; align-items: center;">
-        <span class="badge" id="cloudCount">云端数据载入中...</span>
+        <span class="badge" id="cloudCount">统计中...</span>
         <button class="btn-sec" style="padding: 4px 8px; font-size: 0.8rem;" onclick="handleLogout()">退出</button>
       </div>
     </div>
 
-    <!-- 实时查重 -->
+    <!-- 1. 实时查重功能 -->
     <div class="card">
-      <h2>🔍 实时查重</h2>
+      <h2>🔍 查号码（看是否有人发过）</h2>
       <div class="input-row">
-        <input type="text" id="checkInput" placeholder="输入待查号码（美号/11位/带符号均可）" autofocus />
-        <button onclick="checkPhoneCloud()">立即查重</button>
+        <input type="text" id="checkInput" placeholder="输入要查的号码（格式不限）" autofocus />
+        <button onclick="checkPhoneCloud()">查询</button>
       </div>
-      <div style="font-size: 0.8rem; color: var(--muted); margin-top: 4px;">支持输入任意带符号格式或后 7 位模糊查重</div>
       <div id="checkResult" class="result"></div>
     </div>
 
-    <!-- 每日导入模块 -->
+    <!-- 2. 每日导入号码 -->
     <div class="card">
-      <h2>📥 每日导入更新 (云端永久同步)</h2>
-      <div class="input-row">
-        <input type="text" id="ownerInput" placeholder="报备来源/群名 (默认: Signal群)" style="flex: 2;" />
-        <input type="date" id="dateInput" style="flex: 1.5;" />
+      <h2>📥 录入/导入号码</h2>
+      
+      <div class="form-group">
+        <label>谁发出来的？（填发件人/业务员/群名字）</label>
+        <input type="text" id="ownerInput" placeholder="例如：业务员小李、老张、Signal 3群" />
       </div>
-      <textarea id="rawTextarea" placeholder="直接把 Signal 聊天记录、多行号码或整段文字贴到这里..."></textarea>
-      <div style="display: flex; gap: 8px; margin-top: 10px;">
-        <button style="flex: 1;" onclick="importToCloud()">一键提取并存入云端 (自动去重)</button>
+
+      <div class="form-group">
+        <label>发件日期</label>
+        <input type="date" id="dateInput" />
       </div>
+
+      <div class="form-group">
+        <label>要录入的号码（直接把聊天记录或多行号码粘到这里）</label>
+        <textarea id="rawTextarea" placeholder="支持整段粘贴，比如：&#10;18033979333&#10;+1 (213) 555-0199&#10;群里小王发的 213-555-0188"></textarea>
+      </div>
+
+      <button style="width: 100%;" onclick="importToCloud()">保存录入到云端</button>
       <div id="importMsg" style="margin-top: 8px; font-size: 0.85rem;"></div>
     </div>
   </div>
@@ -172,11 +163,10 @@
 </div>
 
 <script>
-  // Supabase 项目与密钥绑定
   const SUPABASE_URL = "https://rmssjawaucirihbymali.supabase.co";
   const SUPABASE_ANON_KEY = "sb_publishable_Ac2hPxtwOeMNBCRNJmGBHw_Xp5pMWRF";
-
   const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
   document.getElementById('dateInput').value = new Date().toISOString().split('T')[0];
 
   function cleanNum(str) { return (str || '').replace(/\D/g, ''); }
@@ -187,17 +177,13 @@
   function formatNum(c) {
     const n = normNum(c);
     if (n.length === 10) return `+1 (${n.slice(0,3)}) ${n.slice(3,6)}-${n.slice(6)}`;
-    if (n.length === 7) return `${n.slice(0,3)}-${n.slice(3)}`;
     return c;
   }
 
   async function initAuth() {
     const { data: { session } } = await sb.auth.getSession();
     renderUserState(session);
-
-    sb.auth.onAuthStateChange((_event, session) => {
-      renderUserState(session);
-    });
+    sb.auth.onAuthStateChange((_event, session) => renderUserState(session));
   }
 
   async function renderUserState(session) {
@@ -212,22 +198,17 @@
       return;
     }
 
-    const { data, error } = await sb
-      .from('profiles')
-      .select('is_approved')
-      .eq('id', session.user.id)
-      .single();
+    const { data } = await sb.from('profiles').select('is_approved').eq('id', session.user.id).single();
 
-    if (error || !data || !data.is_approved) {
+    if (!data || !data.is_approved) {
       authSec.classList.add('hidden');
       pendSec.classList.remove('hidden');
       appSec.classList.add('hidden');
-      document.getElementById('pendingUserText').innerText = `当前登录账号: ${session.user.email}`;
     } else {
       authSec.classList.add('hidden');
       pendSec.classList.add('hidden');
       appSec.classList.remove('hidden');
-      document.getElementById('currentUserEmail').innerText = `已授权: ${session.user.email}`;
+      document.getElementById('currentUserEmail').innerText = session.user.email;
       fetchCount();
     }
   }
@@ -241,27 +222,11 @@
     if (error) msg.innerText = `登录失败: ${error.message}`;
   }
 
-  async function handleRegister() {
-    const email = document.getElementById('authEmail').value.trim();
-    const password = document.getElementById('authPassword').value;
-    const msg = document.getElementById('authFeedback');
-    msg.innerText = '';
-    if (password.length < 6) {
-      msg.innerText = '密码长度至少需要 6 位';
-      return;
-    }
-    const { error } = await sb.auth.signUp({ email, password });
-    if (error) {
-      msg.innerText = `注册失败: ${error.message}`;
-    } else {
-      alert('注册申请已提交！请联系主控管理员为您审核通过。');
-    }
-  }
-
   async function handleLogout() {
     await sb.auth.signOut();
   }
 
+  // 核心查询逻辑：精准显示是谁发的、什么时候发的
   async function checkPhoneCloud() {
     const raw = document.getElementById('checkInput').value.trim();
     const box = document.getElementById('checkResult');
@@ -278,10 +243,12 @@
     if (exactMatches && exactMatches.length > 0) {
       const item = exactMatches[0];
       box.className = 'result res-collision';
-      box.innerHTML = `🚨 <strong>撞车警告！该号码已在云端数据库中！</strong><br>
-        • 查询号码：<strong>${raw}</strong><br>
-        • 库内命中：<strong>${item.display}</strong><br>
-        • 首次报备来源：<strong>${item.owner}</strong> (${item.record_date})`;
+      box.innerHTML = `🚨 <strong>撞车警告！该号码之前已被发过！</strong><br>
+        ------------------------------------<br>
+        • 查重号码：<strong>${raw}</strong><br>
+        • <strong>发件人/报备人</strong>：<span style="font-size:1.05rem; font-weight:bold; color:#b91c1c;">${item.owner}</span><br>
+        • <strong>发件日期</strong>：${item.record_date}<br>
+        • 规范格式：${item.display}`;
       return;
     }
 
@@ -295,32 +262,39 @@
       if (tailMatches && tailMatches.length > 0) {
         const item = tailMatches[0];
         box.className = 'result res-warn';
-        box.innerHTML = `⚠️ <strong>疑似撞车预警（末 7 位相同）！</strong><br>
-          • 库内记录：<strong>${item.display}</strong> (${item.owner} / ${item.record_date})<br>
-          <em>请确认是否因区号缺失发生重复报备。</em>`;
+        box.innerHTML = `⚠️ <strong>疑似重复（末 7 位相同）！</strong><br>
+          • 库内发件人：<strong>${item.owner}</strong> (${item.record_date})<br>
+          • 库内号码：${item.display}`;
         return;
       }
     }
 
     box.className = 'result res-safe';
-    box.innerHTML = `✅ <strong>未撞车</strong>：号码未在数据库中登记，可正常使用。`;
+    box.innerHTML = `✅ <strong>该号码从未被登记过</strong>，可以正常使用。`;
   }
 
   document.getElementById('checkInput').addEventListener('keydown', e => {
     if (e.key === 'Enter') checkPhoneCloud();
   });
 
+  // 导入逻辑
   async function importToCloud() {
     const raw = document.getElementById('rawTextarea').value;
-    const owner = document.getElementById('ownerInput').value.trim() || 'Signal群';
+    const owner = document.getElementById('ownerInput').value.trim();
     const date = document.getElementById('dateInput').value || new Date().toISOString().split('T')[0];
     const msg = document.getElementById('importMsg');
 
-    const regex = /(?:\+?1[-.\s]?)?(?:\(?\d{3}\)?[-.\s]?)?\d{3}[-.\s]?\d{4}\b/g;
+    if (!owner) {
+      msg.style.color = '#dc2626';
+      msg.innerText = '⚠️ 请先填写【谁发出来的（发件人/群名）】，以便日后追溯是谁发的！';
+      return;
+    }
+
+    const regex = /(?:\+?1[-.\s]?)?(?:\(?\d{3}\)?[-.\s]?)?\d{3}[-.\s]?\d{4}\b|\b1\d{10}\b/g;
     const matches = raw.match(regex);
     if (!matches) {
       msg.style.color = '#dc2626';
-      msg.innerText = '未识别到有效电话号码';
+      msg.innerText = '大文本框内未识别到有效电话号码，请检查。';
       return;
     }
 
@@ -343,11 +317,11 @@
 
     if (error) {
       msg.style.color = '#dc2626';
-      msg.innerText = `同步失败: ${error.message}`;
+      msg.innerText = `保存失败: ${error.message}`;
     } else {
       document.getElementById('rawTextarea').value = '';
       msg.style.color = '#16a34a';
-      msg.innerText = `✅ 今日更新完成：扫描出 ${matches.length} 条号码，已自动排重并同步至云端！`;
+      msg.innerText = `✅ 成功录入！已将提取出的 ${matches.length} 条号码归属到【${owner}】名下。`;
       fetchCount();
     }
   }
@@ -355,7 +329,7 @@
   async function fetchCount() {
     const { count } = await sb.from('phone_records').select('*', { count: 'exact', head: true });
     if (count !== null) {
-      document.getElementById('cloudCount').innerText = `云端总库：${count} 条`;
+      document.getElementById('cloudCount').innerText = `总库记录：${count} 条`;
     }
   }
 
