@@ -53,7 +53,16 @@
       outline: none;
     }
     input:focus, textarea:focus { border-color: var(--accent); }
-    textarea { height: 120px; font-family: monospace; resize: vertical; line-height: 1.4; }
+    textarea { height: 90px; font-family: monospace; resize: vertical; line-height: 1.4; }
+    .file-box {
+      border: 2px dashed #cbd5e1;
+      background: #f8fafc;
+      border-radius: 8px;
+      padding: 14px;
+      text-align: center;
+      cursor: pointer;
+    }
+    .file-box input[type="file"] { display: none; }
     button {
       background: var(--accent);
       color: #fff;
@@ -117,7 +126,7 @@
   <div id="appSection" class="hidden" style="display: flex; flex-direction: column; gap: 16px;">
     <div class="header">
       <div>
-        <h1>Signal 号码查重系统</h1>
+        <h1>Signal 号码追溯系统</h1>
         <span id="currentUserEmail" style="font-size: 0.82rem; color: var(--muted);"></span>
       </div>
       <div style="display: flex; gap: 8px; align-items: center;">
@@ -126,7 +135,7 @@
       </div>
     </div>
 
-    <!-- 1. 实时查重功能 -->
+    <!-- 1. 实时查重 -->
     <div class="card">
       <h2>🔍 查号码（看是否有人发过）</h2>
       <div class="input-row">
@@ -136,13 +145,13 @@
       <div id="checkResult" class="result"></div>
     </div>
 
-    <!-- 2. 每日导入号码 -->
+    <!-- 2. 批量导入模块 -->
     <div class="card">
-      <h2>📥 录入/导入号码</h2>
+      <h2>📥 录入/批量导入号码</h2>
       
       <div class="form-group">
-        <label>谁发出来的？（填发件人/业务员/群名字）</label>
-        <input type="text" id="ownerInput" placeholder="例如：业务员小李、老张、Signal 3群" />
+        <label>谁发出来的？（填业务员姓名/群名/文件名）</label>
+        <input type="text" id="ownerInput" placeholder="例如：业务一组、老张、Signal群" />
       </div>
 
       <div class="form-group">
@@ -150,12 +159,22 @@
         <input type="date" id="dateInput" />
       </div>
 
+      <!-- 快捷方式 1: 直接选文件夹或多个文件 -->
       <div class="form-group">
-        <label>要录入的号码（直接把聊天记录或多行号码粘到这里）</label>
-        <textarea id="rawTextarea" placeholder="支持整段粘贴，比如：&#10;18033979333&#10;+1 (213) 555-0199&#10;群里小王发的 213-555-0188"></textarea>
+        <label>方式 A：直接上传整个文件夹或多个 txt/csv 文件</label>
+        <div class="file-box" onclick="document.getElementById('folderInput').click()">
+          <span id="filePrompt">📁 点击选择整个文件夹（或多个 .txt / .csv 文件）</span>
+          <input type="file" id="folderInput" webkitdirectory directory multiple accept=".txt,.csv" onchange="handleFileSelect(event)" />
+        </div>
       </div>
 
-      <button style="width: 100%;" onclick="importToCloud()">保存录入到云端</button>
+      <!-- 快捷方式 2: 手动贴文字 -->
+      <div class="form-group">
+        <label>方式 B：手动粘贴聊天文本</label>
+        <textarea id="rawTextarea" placeholder="或者直接在这里粘贴聊天记录文本..."></textarea>
+      </div>
+
+      <button style="width: 100%;" id="btnUpload" onclick="importToCloud()">一键提取并存入云端 (自动去重)</button>
       <div id="importMsg" style="margin-top: 8px; font-size: 0.85rem;"></div>
     </div>
   </div>
@@ -168,6 +187,7 @@
   const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
   document.getElementById('dateInput').value = new Date().toISOString().split('T')[0];
+  let accumulatedText = "";
 
   function cleanNum(str) { return (str || '').replace(/\D/g, ''); }
   function normNum(str) {
@@ -226,7 +246,6 @@
     await sb.auth.signOut();
   }
 
-  // 核心查询逻辑：精准显示是谁发的、什么时候发的
   async function checkPhoneCloud() {
     const raw = document.getElementById('checkInput').value.trim();
     const box = document.getElementById('checkResult');
@@ -277,53 +296,92 @@
     if (e.key === 'Enter') checkPhoneCloud();
   });
 
-  // 导入逻辑
+  // 读取选中文件夹或文件内容
+  async function handleFileSelect(event) {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+
+    accumulatedText = "";
+    document.getElementById('filePrompt').innerText = `⏳ 正在读取 ${files.length} 个文件...`;
+
+    let readCount = 0;
+    for (let file of files) {
+      if (file.name.endsWith('.txt') || file.name.endsWith('.csv')) {
+        const content = await file.text();
+        accumulatedText += "\n" + content;
+        readCount++;
+      }
+    }
+
+    document.getElementById('filePrompt').innerText = `✅ 已载入 ${readCount} 个文件内容，请确认上方【谁发出来的】，然后点击存入。`;
+  }
+
+  // 批量入库
   async function importToCloud() {
-    const raw = document.getElementById('rawTextarea').value;
     const owner = document.getElementById('ownerInput').value.trim();
     const date = document.getElementById('dateInput').value || new Date().toISOString().split('T')[0];
+    const manualText = document.getElementById('rawTextarea').value;
     const msg = document.getElementById('importMsg');
 
     if (!owner) {
       msg.style.color = '#dc2626';
-      msg.innerText = '⚠️ 请先填写【谁发出来的（发件人/群名）】，以便日后追溯是谁发的！';
+      msg.innerText = '⚠️ 请先填写【谁发出来的？】，便于后续追溯！';
       return;
     }
 
+    const combined = accumulatedText + "\n" + manualText;
     const regex = /(?:\+?1[-.\s]?)?(?:\(?\d{3}\)?[-.\s]?)?\d{3}[-.\s]?\d{4}\b|\b1\d{10}\b/g;
-    const matches = raw.match(regex);
-    if (!matches) {
+    const matches = combined.match(regex);
+
+    if (!matches || matches.length === 0) {
       msg.style.color = '#dc2626';
-      msg.innerText = '大文本框内未识别到有效电话号码，请检查。';
+      msg.innerText = '未从文件或文本框中检测到有效号码。';
       return;
     }
 
-    const payload = [];
+    msg.style.color = '#2563eb';
+    msg.innerText = `正在提取并写入云端数据库（共扫描到 ${matches.length} 个号码）...`;
+
+    const map = new Map();
     matches.forEach(item => {
       const cleaned = cleanNum(item);
       if (cleaned.length >= 7 && cleaned.length <= 12) {
-        payload.push({
-          clean_key: normNum(cleaned),
-          display: formatNum(cleaned),
-          owner: owner,
-          record_date: date
-        });
+        const key = normNum(cleaned);
+        if (!map.has(key)) {
+          map.set(key, {
+            clean_key: key,
+            display: formatNum(cleaned),
+            owner: owner,
+            record_date: date
+          });
+        }
       }
     });
 
-    const { error } = await sb
-      .from('phone_records')
-      .upsert(payload, { onConflict: 'clean_key', ignoreDuplicates: true });
+    const payload = Array.from(map.values());
+    const chunkSize = 500; // 分批写入避免超出限制
+    let totalInserted = 0;
 
-    if (error) {
-      msg.style.color = '#dc2626';
-      msg.innerText = `保存失败: ${error.message}`;
-    } else {
-      document.getElementById('rawTextarea').value = '';
-      msg.style.color = '#16a34a';
-      msg.innerText = `✅ 成功录入！已将提取出的 ${matches.length} 条号码归属到【${owner}】名下。`;
-      fetchCount();
+    for (let i = 0; i < payload.length; i += chunkSize) {
+      const slice = payload.slice(i, i + chunkSize);
+      const { error } = await sb
+        .from('phone_records')
+        .upsert(slice, { onConflict: 'clean_key', ignoreDuplicates: true });
+
+      if (error) {
+        msg.style.color = '#dc2626';
+        msg.innerText = `入库中断: ${error.message}`;
+        return;
+      }
+      totalInserted += slice.length;
     }
+
+    document.getElementById('rawTextarea').value = '';
+    accumulatedText = "";
+    document.getElementById('filePrompt').innerText = '📁 点击选择整个文件夹（或多个 .txt / .csv 文件）';
+    msg.style.color = '#16a34a';
+    msg.innerText = `✅ 批量导入完成！共处理 ${payload.length} 个不重复号码，已全部归档在【${owner}】名下！`;
+    fetchCount();
   }
 
   async function fetchCount() {
