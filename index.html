@@ -1,81 +1,307 @@
-// 1. 单个号码直接录入云端
-async function addSingleNumber() {
-  const number = document.getElementById('singleNumberInput').value.trim();
-  const source = document.getElementById('singleSourceInput').value.trim() || '手动录入';
-  const msgBox = document.getElementById('singleNumberMsg');
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>号码查重与溯源核对系统</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body { background-color: #f4f6f9; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+    .card { border: none; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+    .nav-tabs .nav-link { font-weight: 500; border: none; color: #6c757d; }
+    .nav-tabs .nav-link.active { color: #0d6efd; border-bottom: 3px solid #0d6efd; background: transparent; }
+    .quote-box { background-color: #212529; color: #38ef7d; border-radius: 6px; padding: 12px; font-family: monospace; white-space: pre-wrap; word-break: break-all; }
+  </style>
+</head>
+<body class="py-4">
 
-  if (!number) {
-    msgBox.innerHTML = '<span class="text-danger">请输入号码！</span>';
-    return;
+<div class="container" style="max-width: 860px;">
+  <div class="text-center mb-4">
+    <h2 class="fw-bold">🔍 号码查重与聊天溯源系统</h2>
+    <p class="text-muted">支持单号秒查、单号直接入库、以及 TXT / JSONL / CSV 批量导入</p>
+  </div>
+
+  <!-- 功能标签页导航 -->
+  <ul class="nav nav-tabs mb-4 justify-content-center" id="myTab" role="tablist">
+    <li class="nav-item" role="presentation">
+      <button class="nav-link active fs-5 px-4" id="search-tab" data-bs-toggle="tab" data-bs-target="#search-panel" type="button" role="tab">🔍 查重比对</button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link fs-5 px-4" id="single-tab" data-bs-toggle="tab" data-bs-target="#single-panel" type="button" role="tab">➕ 单号入库</button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link fs-5 px-4" id="batch-tab" data-bs-toggle="tab" data-bs-target="#batch-panel" type="button" role="tab">📁 文件导入</button>
+    </li>
+  </ul>
+
+  <div class="tab-content" id="myTabContent">
+    
+    <!-- 1. 查重面板 -->
+    <div class="tab-pane fade show active" id="search-panel" role="tabpanel">
+      <div class="card p-4">
+        <label class="form-label fw-bold fs-5">输入号码（自动适配纯数字、带横杠、带括号）：</label>
+        <div class="input-group input-group-lg mb-3">
+          <input type="text" id="checkInput" class="form-control" placeholder="如 901) 684-6018 或 253-5481" onkeydown="if(event.key==='Enter') searchNumber()">
+          <button class="btn btn-primary px-4" onclick="searchNumber()">查 询</button>
+        </div>
+        <div id="searchResultArea"></div>
+      </div>
+    </div>
+
+    <!-- 2. 单号录入面板 -->
+    <div class="tab-pane fade" id="single-panel" role="tabpanel">
+      <div class="card p-4">
+        <h5 class="fw-bold mb-3">单个号码快捷入库</h5>
+        <div class="mb-3">
+          <label class="form-label">号码：</label>
+          <input type="text" id="singlePhone" class="form-control" placeholder="如 (330) 208-5433 或 253-5481">
+        </div>
+        <div class="mb-3">
+          <label class="form-label">发件人 / 来源昵称：</label>
+          <input type="text" id="singleSender" class="form-control" placeholder="如：~李逍遥 仗剑天涯为红颜">
+        </div>
+        <div class="mb-3">
+          <label class="form-label">完整聊天上下文 / 备注（选填）：</label>
+          <textarea id="singleQuote" class="form-control" rows="2" placeholder="可粘贴原话，如：[2024/3/3 上午3:29:41] ~李逍遥: (330) 208-5433 GV"></textarea>
+        </div>
+        <button class="btn btn-success w-100 py-2 fs-5" onclick="submitSingleRecord()">存入数据库</button>
+        <div id="singleStatus" class="mt-3"></div>
+      </div>
+    </div>
+
+    <!-- 3. 文件批量导入面板 -->
+    <div class="tab-pane fade" id="batch-panel" role="tabpanel">
+      <div class="card p-4">
+        <h5 class="fw-bold mb-3">导入聊天记录（TXT / JSONL / CSV / 文件夹）</h5>
+        <div class="mb-3">
+          <label class="form-label">默认来源 / 群名称：</label>
+          <input type="text" id="batchSource" class="form-control" placeholder="如：领英撞车群" value="领英撞车群">
+        </div>
+
+        <div class="row g-3 mb-3">
+          <div class="col-md-6">
+            <label class="form-label fw-bold">方法一：直接选单文件 (.txt / .jsonl / .csv)</label>
+            <input type="file" id="singleFileInput" class="form-control" accept=".txt,.jsonl,.json,.csv" onchange="processSingleFile(event)">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label fw-bold">方法二：选择整个文件夹</label>
+            <input type="file" id="folderInput" class="form-control" webkitdirectory directory onchange="processFolder(event)">
+          </div>
+        </div>
+
+        <div id="parseProgress" class="alert alert-secondary d-none"></div>
+
+        <button class="btn btn-primary w-100 py-2 fs-5" id="batchSubmitBtn" onclick="saveBatchRecords()" disabled>
+          开始写入数据库 (待处理: 0 条)
+        </button>
+        <div id="batchStatus" class="mt-3"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+  // 本地存储兜底 + 云端数据缓存
+  const STORAGE_KEY = 'signal_collision_records';
+  let memoryDB = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+  let pendingRecords = [];
+
+  // 格式清洗：只提取纯数字（去掉括号、空格、横杠、+号）
+  function cleanToDigits(str) {
+    if (!str) return '';
+    return str.replace(/\D/g, '');
   }
 
-  // 格式校验与清洗
-  const cleanNum = number.replace(/[^\d-]/g, '');
+  // 1. 查询查重逻辑
+  function searchNumber() {
+    const rawInput = document.getElementById('checkInput').value.trim();
+    const resultArea = document.getElementById('searchResultArea');
+    if (!rawInput) {
+      resultArea.innerHTML = '<div class="alert alert-warning mt-3">请输入需要查询的号码！</div>';
+      return;
+    }
 
-  try {
-    msgBox.innerHTML = '<span class="text-info">正在写入云端...</span>';
-    
-    // 调用你的云数据库写入接口（以你的数据库逻辑为准）
-    await saveToDatabase([{ number: cleanNum, source: source, create_time: new Date().toISOString() }]);
-    
-    msgBox.innerHTML = `<span class="text-success">✔ 号码 ${cleanNum} 已成功入库！</span>`;
-    document.getElementById('singleNumberInput').value = '';
-  } catch (err) {
-    msgBox.innerHTML = `<span class="text-danger">录入失败: ${err.message}</span>`;
-  }
-}
+    const inputDigits = cleanToDigits(rawInput);
+    if (!inputDigits) {
+      resultArea.innerHTML = '<div class="alert alert-warning mt-3">请输入有效的数字！</div>';
+      return;
+    }
 
-// 2. 临时存储从单文件解析出的号码列表
-let parsedBatchData = [];
+    // 匹配规则：7位短号、尾号匹配或全匹配
+    const hit = memoryDB.find(item => {
+      const dbDigits = item.clean_digits;
+      if (!dbDigits) return false;
+      return dbDigits === inputDigits || 
+             dbDigits.endsWith(inputDigits) || 
+             inputDigits.endsWith(dbDigits);
+    });
 
-// 3. 处理单文件上传 (.txt, .jsonl, .csv)
-function handleSingleFile(event) {
-  const file = event.target.files[0];
-  if (!file) return;
-
-  const statusMsg = document.getElementById('batchStatusMsg');
-  statusMsg.innerText = `正在读取文件: ${file.name}...`;
-
-  const reader = new FileReader();
-  reader.onload = function(e) {
-    const content = e.target.result;
-    
-    // 正则提取所有符合规则的号码：支持 xxx-xxxx 短号、10位、11位等纯数字
-    const regex = /(?:\b\d{3}-\d{4}\b|\b1\d{10}\b|\b\d{10,11}\b)/g;
-    const matches = content.match(regex) || [];
-    
-    // 数组去重
-    const uniqueNumbers = [...new Set(matches)];
-    
-    parsedBatchData = uniqueNumbers;
-    statusMsg.innerHTML = `<span class="text-success">成功识别到 <b>${uniqueNumbers.length}</b> 个有效号码，点击下方按钮即可写入云端。</span>`;
-  };
-  reader.readAsText(file);
-}
-
-// 4. 批量提交到云端
-async function submitBatchToCloud() {
-  const source = document.getElementById('batchSourceInput').value.trim() || '批量导入';
-  const statusMsg = document.getElementById('batchStatusMsg');
-
-  if (parsedBatchData.length === 0) {
-    alert('暂无解析出的号码，请先选择文件！');
-    return;
+    if (hit) {
+      resultArea.innerHTML = `
+        <div class="alert alert-danger p-3 mt-3 shadow-sm" style="border-left: 6px solid #dc3545;">
+          <h4 class="text-danger fw-bold mb-3">🚨 撞车警告！该号码之前已被发过！</h4>
+          <div class="mb-2 fs-5"><strong>• 查询号码：</strong> <span class="badge bg-danger">${rawInput}</span></div>
+          <div class="mb-2"><strong>• 发件人 / 报备人：</strong> <span class="text-primary fw-bold">${hit.sender || '未知'}</span></div>
+          <div class="mb-2"><strong>• 发生时间：</strong> <span class="text-muted">${hit.time || '未知时间'}</span></div>
+          <div class="mt-3">
+            <div class="small text-muted fw-bold mb-1">原始聊天记录原话：</div>
+            <div class="quote-box">${hit.quote || hit.raw_phone}</div>
+          </div>
+        </div>
+      `;
+    } else {
+      resultArea.innerHTML = `
+        <div class="alert alert-success p-3 mt-3">
+          <h5 class="text-success fw-bold mb-1">✔ 安全！未查询到历史撞车记录</h5>
+          <p class="mb-0 text-muted">当前库中共有 ${memoryDB.length} 条记录，该号码可放心使用。</p>
+        </div>
+      `;
+    }
   }
 
-  statusMsg.innerHTML = `<span class="text-info">正在批量写入 ${parsedBatchData.length} 个号码到云端，请稍候...</span>`;
+  // 2. 单号录入逻辑
+  function submitSingleRecord() {
+    const phone = document.getElementById('singlePhone').value.trim();
+    const sender = document.getElementById('singleSender').value.trim() || '手动报备';
+    const quote = document.getElementById('singleQuote').value.trim();
+    const statusDiv = document.getElementById('singleStatus');
 
-  try {
-    const payload = parsedBatchData.map(num => ({
-      number: num,
-      source: source,
-      create_time: new Date().toISOString()
-    }));
+    if (!phone) {
+      statusDiv.innerHTML = '<div class="alert alert-warning">请填写号码！</div>';
+      return;
+    }
 
-    await saveToDatabase(payload);
-    statusMsg.innerHTML = `<span class="text-success">🎉 写入完成！共入库 ${parsedBatchData.length} 条记录。</span>`;
-    parsedBatchData = [];
-  } catch (err) {
-    statusMsg.innerHTML = `<span class="text-danger">写入出错: ${err.message}</span>`;
+    const cleanNum = cleanToDigits(phone);
+    const newRecord = {
+      raw_phone: phone,
+      clean_digits: cleanNum,
+      sender: sender,
+      time: new Date().toLocaleString(),
+      quote: quote || `[${new Date().toLocaleString()}] ${sender}: ${phone}`
+    };
+
+    memoryDB.unshift(newRecord);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(memoryDB));
+
+    statusDiv.innerHTML = `<div class="alert alert-success">✔ 号码 <b>${phone}</b> 已成功录入！当前总库量: ${memoryDB.length}</div>`;
+    document.getElementById('singlePhone').value = '';
+    document.getElementById('singleQuote').value = '';
   }
-}
+
+  // 3. 通用文本解析器（支持 TXT、WhatsApp 导出、Signal JSONL）
+  function parseRawContent(text, defaultSource) {
+    const lines = text.split('\n');
+    const records = [];
+
+    // 格式识别：[2024/3/3 上午3:29:41] 发送人: 内容
+    const chatPattern = /^\[?(\d{4}[-/.]\d{1,2}[-/.]\d{1,2}[^\]]*)\]?\s*([^:]+?):\s*(.*)$/;
+    // 号码正则：识别 (xxx) xxx-xxxx、xxx-xxxx、10/11位等各种格式
+    const phonePattern = /(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}|\b\d{3}-\d{4}\b|\b1\d{10}\b/g;
+
+    lines.forEach(line => {
+      const trimmed = line.trim();
+      if (!trimmed) return;
+
+      let msgTime = '';
+      let sender = defaultSource || '未知';
+      let content = trimmed;
+
+      // 如果是 Signal main.jsonl 导出（每行为一个 json 对象）
+      if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+        try {
+          const jsonItem = JSON.parse(trimmed);
+          content = jsonItem.body || jsonItem.text || '';
+          sender = jsonItem.senderName || jsonItem.author || defaultSource;
+          if (jsonItem.timestamp) {
+            msgTime = new Date(jsonItem.timestamp).toLocaleString();
+          }
+        } catch (e) {
+          content = trimmed;
+        }
+      } else {
+        // 普通聊天文本识别
+        const match = trimmed.match(chatPattern);
+        if (match) {
+          msgTime = match[1].trim();
+          sender = match[2].trim();
+          content = match[3].trim();
+        }
+      }
+
+      const matches = content.match(phonePattern);
+      if (matches) {
+        matches.forEach(phone => {
+          const digits = cleanToDigits(phone);
+          if (digits.length >= 7) {
+            records.push({
+              raw_phone: phone.trim(),
+              clean_digits: digits,
+              sender: sender,
+              time: msgTime || new Date().toLocaleDateString(),
+              quote: trimmed
+            });
+          }
+        });
+      }
+    });
+
+    return records;
+  }
+
+  // 处理单文件上传
+  function processSingleFile(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    readFile(file);
+  }
+
+  // 处理文件夹上传
+  function processFolder(event) {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+    Array.from(files).forEach(f => {
+      if (f.name.endsWith('.txt') || f.name.endsWith('.jsonl') || f.name.endsWith('.csv')) {
+        readFile(f);
+      }
+    });
+  }
+
+  function readFile(file) {
+    const defaultSource = document.getElementById('batchSource').value.trim() || file.name;
+    const progress = document.getElementById('parseProgress');
+    progress.classList.remove('d-none');
+    progress.innerText = `正在读取并分析文件: ${file.name}...`;
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      const records = parseRawContent(e.target.result, defaultSource);
+      pendingRecords = pendingRecords.concat(records);
+
+      progress.innerHTML = `已从 <b>${file.name}</b> 提取到 <b>${records.length}</b> 条记录！当前待入库总数: <b>${pendingRecords.length}</b> 条。`;
+      const btn = document.getElementById('batchSubmitBtn');
+      btn.disabled = false;
+      btn.innerText = `开始写入数据库 (待处理: ${pendingRecords.length} 条)`;
+    };
+    reader.readAsText(file);
+  }
+
+  // 批量保存
+  function saveBatchRecords() {
+    if (pendingRecords.length === 0) return;
+    const status = document.getElementById('batchStatus');
+    status.innerHTML = '<div class="alert alert-info">正在批量写入...</div>';
+
+    // 去重合并
+    memoryDB = pendingRecords.concat(memoryDB);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(memoryDB));
+
+    status.innerHTML = `<div class="alert alert-success">🎉 成功导入并存入 <b>${pendingRecords.length}</b> 条记录！当前总库量: ${memoryDB.length}</div>`;
+    pendingRecords = [];
+    document.getElementById('batchSubmitBtn').disabled = true;
+    document.getElementById('batchSubmitBtn').innerText = '开始写入数据库 (待处理: 0 条)';
+  }
+</script>
+</body>
+</html>
