@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>Signal 号码防撞车查询系统</title>
+  <style>
+    :root {
+      --bg: #f8fafc;
+      --card-bg: #ffffff;
+      --border: #e2e8f0;
+      --text-main: #0f172a;
+      --text-muted: #64748b;
+      --accent: #2563eb;
+      --accent-hover: #1d4ed8;
+      --danger-bg: #fef2f2;
+      --danger-border: #f87171;
+      --danger-text: #991b1b;
+      --success-bg: #f0fdf4;
+      --success-border: #4ade80;
+      --success-text: #166534;
+      --warning-bg: #fffbeb;
+      --warning-border: #fcd34d;
+      --warning-text: #92400e;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text-main);
+      padding: 32px 20px;
+      display: flex;
+      justify-content: center;
+    }
+    .container {
+      width: 100%;
+      max-width: 860px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 16px;
+      border-bottom: 2px solid var(--border);
+    }
+    .header h1 {
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: var(--text-main);
+    }
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 24px;
+      box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
+    }
+    h2 {
+      font-size: 1.05rem;
+      margin-bottom: 14px;
+      color: #1e293b;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .input-row {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    input[type="text"], input[type="date"], textarea {
+      background: #ffffff;
+      border: 1px solid #cbd5e1;
+      color: var(--text-main);
+      padding: 10px 14px;
+      border-radius: 6px;
+      font-size: 0.95rem;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    input[type="text"]:focus, input[type="date"]:focus, textarea:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+    }
+    .search-input {
+      flex: 1;
+      font-size: 1.05rem !important;
+    }
+    textarea {
+      width: 100%;
+      height: 110px;
+      font-family: monospace;
+      resize: vertical;
+      line-height: 1.5;
+    }
+    button {
+      background: var(--accent);
+      color: #ffffff;
+      border: none;
+      padding: 10px 22px;
+      font-weight: 600;
+      font-size: 0.95rem;
+      border-radius: 6px;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background-color 0.15s;
+    }
+    button:hover { background: var(--accent-hover); }
+    button.secondary {
+      background: #f1f5f9;
+      color: #334155;
+      border: 1px solid #cbd5e1;
+    }
+    button.secondary:hover { background: #e2e8f0; }
+    button.danger {
+      background: #ef4444;
+      color: #ffffff;
+    }
+    button.danger:hover { background: #dc2626; }
+    .badge {
+      display: inline-block;
+      padding: 5px 12px;
+      border-radius: 9999px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      background: #eff6ff;
+      color: var(--accent);
+      border: 1px solid #dbeafe;
+    }
+    .result-box {
+      margin-top: 14px;
+      padding: 16px;
+      border-radius: 8px;
+      display: none;
+      font-size: 1rem;
+      line-height: 1.6;
+    }
+    .result-box.collision {
+      background: var(--danger-bg);
+      border: 1px solid var(--danger-border);
+      color: var(--danger-text);
+    }
+    .result-box.safe {
+      background: var(--success-bg);
+      border: 1px solid var(--success-border);
+      color: var(--success-text);
+    }
+    .result-box.tail-warn {
+      background: var(--warning-bg);
+      border: 1px solid var(--warning-border);
+      color: var(--warning-text);
+    }
+    .drop-zone {
+      border: 2px dashed #cbd5e1;
+      border-radius: 8px;
+      padding: 18px;
+      text-align: center;
+      color: var(--text-muted);
+      cursor: pointer;
+      margin-bottom: 12px;
+      background: #f8fafc;
+      transition: all 0.2s;
+    }
+    .drop-zone:hover {
+      border-color: var(--accent);
+      background: #eff6ff;
+      color: var(--accent);
+    }
+    .tip-text {
+      font-size: 0.82rem;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 12px;
+      font-size: 0.9rem;
+    }
+    th, td {
+      text-align: left;
+      padding: 12px 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    th {
+      color: var(--text-muted);
+      font-weight: 600;
+      background: #f8fafc;
+    }
+    tr:last-child td { border-bottom: none; }
+    code {
+      background: #f1f5f9;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: monospace;
+      color: #334155;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <div class="header">
+    <h1>Signal 号码防撞车查询系统</h1>
+    <span class="badge" id="statsBadge">已收录：0 条记录</span>
+  </div>
+
+  <!-- 查重区域 -->
+  <div class="card">
+    <h2>🔍 查询号码是否撞车</h2>
+    <div class="input-row">
+      <input type="text" id="checkInput" class="search-input" placeholder="输入待查号码（如：12125550199、842-2651、842.2651）" autofocus />
+      <button onclick="checkPhone()">立即查重</button>
+    </div>
+    <div class="tip-text">💡 自动识别美号（带不带+1均可）、自动去除连字符 `-`、小数点 `.` 及空格。</div>
+    <div id="checkResult" class="result-box"></div>
+  </div>
+
+  <!-- 导入区域 -->
+  <div class="card">
+    <h2>📥 导入日常更新号码</h2>
+    <div class="input-row">
+      <input type="text" id="ownerInput" placeholder="报备人/群备注（如：周权 / Signal大群）" style="width: 260px;" />
+      <input type="date" id="dateInput" style="width: 170px;" />
+    </div>
+
+    <!-- 文件上传 -->
+    <div class="drop-zone" onclick="document.getElementById('fileInput').click()">
+      📁 点击此处选择文件直接导入（支持 TXT、CSV 或 JSON 备份文件）
+      <input type="file" id="fileInput" accept=".txt,.csv,.json" style="display: none;" onchange="handleFile(event)" />
+    </div>
+
+    <!-- 文本批量导入 -->
+    <textarea id="rawTextarea" placeholder="或者直接把群聊内容整段粘贴在这里，系统会自动扫描并提取号码入库..."></textarea>
+    <div style="display: flex; gap: 10px; margin-top: 10px;">
+      <button onclick="importNumbers()">提取并入库</button>
+      <button class="secondary" onclick="exportData()">导出备份 (JSON)</button>
+      <button class="danger" style="margin-left: auto;" onclick="clearAll()">清空全部数据</button>
+    </div>
+    <div id="importMsg" style="margin-top: 8px; font-size: 0.88rem; color: var(--text-muted);"></div>
+  </div>
+
+  <!-- 历史表格预览 -->
+  <div class="card">
+    <h2>📋 最近收录号码 (最新 10 条)</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>比对底码 (纯数字)</th>
+          <th>标准展示</th>
+          <th>报备人 / 来源</th>
+          <th>报备日期</th>
+        </tr>
+      </thead>
+      <tbody id="recordTableBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+  const STORAGE_KEY = 'signal_phone_collision_db';
+  document.getElementById('dateInput').value = new Date().toISOString().split('T')[0];
+
+  function getDB() {
+    return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+  }
+
+  function saveDB(db) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
+    updateUI();
+  }
+
+  function cleanNumber(str) {
+    return (str || '').replace(/\D/g, '');
+  }
+
+  function normalizeUSPhone(cleanStr) {
+    if (cleanStr.length === 11 && cleanStr.startsWith('1')) {
+      return cleanStr.slice(1);
+    }
+    return cleanStr;
+  }
+
+  function formatDisplay(cleanStr) {
+    const s = normalizeUSPhone(cleanStr);
+    if (s.length === 10) {
+      return `+1 (${s.slice(0,3)}) ${s.slice(3,6)}-${s.slice(6)}`;
+    } else if (s.length === 7) {
+      return `${s.slice(0,3)}-${s.slice(3)}`;
+    }
+    return cleanStr;
+  }
+
+  function checkPhone() {
+    const rawInput = document.getElementById('checkInput').value.trim();
+    const resultBox = document.getElementById('checkResult');
+    if (!rawInput) return;
+
+    const cleaned = cleanNumber(rawInput);
+    if (!cleaned) {
+      alert('请输入有效的数字号码！');
+      return;
+    }
+
+    const norm = normalizeUSPhone(cleaned);
+    const db = getDB();
+    resultBox.style.display = 'block';
+
+    let matchKey = null;
+    if (db[norm]) {
+      matchKey = norm;
+    } else if (db[cleaned]) {
+      matchKey = cleaned;
+    } else if (norm.length === 10 && db['1' + norm]) {
+      matchKey = '1' + norm;
+    }
+
+    if (matchKey) {
+      const item = db[matchKey];
+      resultBox.className = 'result-box collision';
+      resultBox.innerHTML = `⚠️ <strong>撞车报警！该号码已存在！</strong><br>
+        • 您输入的查询：<strong>${rawInput}</strong><br>
+        • 库内命中记录：<strong>${item.display}</strong> (底码: <code>${matchKey}</code>)<br>
+        • 首次报备人/群来源：<strong>${item.owner || '未标注'}</strong><br>
+        • 报备日期：<strong>${item.date}</strong>`;
+      return;
+    }
+
+    const tail7 = cleaned.slice(-7);
+    if (tail7.length === 7) {
+      for (let k in db) {
+        if (k.slice(-7) === tail7 && k !== norm) {
+          const item = db[k];
+          resultBox.className = 'result-box tail-warn';
+          resultBox.innerHTML = `🔔 <strong>疑似撞车预警（末 7 位相同）！</strong><br>
+            • 您输入的是：<strong>${rawInput}</strong><br>
+            • 库内发现尾号完全一致的记录：<strong>${item.display}</strong><br>
+            • 报备人：<strong>${item.owner}</strong> | 报备日期：<strong>${item.date}</strong><br>
+            <em>提示：请核实是否为同一客户漏写/多写了前缀区号。</em>`;
+          return;
+        }
+      }
+    }
+
+    resultBox.className = 'result-box safe';
+    resultBox.innerHTML = `✅ <strong>未撞车！</strong> 号码 <strong>${rawInput}</strong>（清洗识别为：<code>${norm}</code>）在系统中不存在，可正常录入。`;
+  }
+
+  document.getElementById('checkInput').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') checkPhone();
+  });
+
+  function handleFile(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function(evt) {
+      const content = evt.target.result;
+      if (file.name.endsWith('.json')) {
+        try {
+          const imported = JSON.parse(content);
+          const db = getDB();
+          let count = 0;
+          for (let k in imported) {
+            const keyNorm = normalizeUSPhone(cleanNumber(k));
+            if (!db[keyNorm]) {
+              db[keyNorm] = imported[k];
+              count++;
+            }
+          }
+          saveDB(db);
+          document.getElementById('importMsg').textContent = `✅ 成功从备份文件导入 ${count} 条号码！`;
+        } catch (err) {
+          alert('JSON 文件格式损坏');
+        }
+      } else {
+        document.getElementById('rawTextarea').value = content;
+        importNumbers();
+      }
+    };
+    reader.readAsText(file, 'utf-8');
+  }
+
+  function importNumbers() {
+    const raw = document.getElementById('rawTextarea').value;
+    const defaultOwner = document.getElementById('ownerInput').value.trim() || 'Signal群组';
+    const date = document.getElementById('dateInput').value || new Date().toISOString().split('T')[0];
+    const msg = document.getElementById('importMsg');
+
+    if (!raw.trim()) {
+      alert('请输入或选择包含号码的文本！');
+      return;
+    }
+
+    const regex = /(?:\+?1[-.\s]?)?(?:\(?\d{3}\)?[-.\s]?)?\d{3}[-.\s]?\d{4}\b/g;
+    const matches = raw.match(regex);
+
+    if (!matches || matches.length === 0) {
+      msg.textContent = '❌ 未能从内容中提取到电话号码，请检查内容。';
+      return;
+    }
+
+    const db = getDB();
+    let newCount = 0;
+    let dupCount = 0;
+
+    matches.forEach(rawNum => {
+      const cleaned = cleanNumber(rawNum);
+      if (cleaned.length < 7 || cleaned.length > 12) return;
+
+      const norm = normalizeUSPhone(cleaned);
+      const display = formatDisplay(cleaned);
+
+      if (!db[norm]) {
+        db[norm] = {
+          display: display,
+          owner: defaultOwner,
+          date: date,
+          timestamp: Date.now()
+        };
+        newCount++;
+      } else {
+        dupCount++;
+      }
+    });
+
+    saveDB(db);
+    document.getElementById('rawTextarea').value = '';
+    msg.textContent = `✅ 导入完成：共扫描出 ${matches.length} 个号码，新增入库 ${newCount} 个，库内已存在 (重复) ${dupCount} 个。`;
+  }
+
+  function updateUI() {
+    const db = getDB();
+    const keys = Object.keys(db);
+    document.getElementById('statsBadge').textContent = `已收录：${keys.length} 条号码`;
+
+    const tbody = document.getElementById('recordTableBody');
+    tbody.innerHTML = '';
+    
+    const list = Object.values(db).sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0)).slice(0, 10);
+    list.forEach(item => {
+      const cleanKey = normalizeUSPhone(cleanNumber(item.display));
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><code>${cleanKey}</code></td>
+        <td><strong>${item.display}</strong></td>
+        <td>${item.owner}</td>
+        <td>${item.date}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  function exportData() {
+    const db = getDB();
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(db, null, 2));
+    const dlAnchorElem = document.createElement('a');
+    dlAnchorElem.setAttribute("href", dataStr);
+    dlAnchorElem.setAttribute("download", `signal_phone_db_${new Date().toISOString().split('T')[0]}.json`);
+    dlAnchorElem.click();
+  }
+
+  function clearAll() {
+    if (confirm('确定要清空全部号码数据库吗？建议先点击“导出备份”。')) {
+      localStorage.removeItem(STORAGE_KEY);
+      updateUI();
+      document.getElementById('checkResult').style.display = 'none';
+    }
+  }
+
+  updateUI();
+</script>
+</body>
+</html>
