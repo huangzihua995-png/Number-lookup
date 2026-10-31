@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>号码查重与溯源核对系统</title>
+  <title>号码查重与聊天溯源系统</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
     body { background-color: #f4f6f9; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
@@ -18,7 +18,7 @@
 <div class="container" style="max-width: 860px;">
   <div class="text-center mb-4">
     <h2 class="fw-bold">🔍 号码查重与聊天溯源系统</h2>
-    <p class="text-muted">支持单号秒查、单号直接入库、以及 TXT / JSONL / CSV 批量导入</p>
+    <div id="dbCountBadge" class="badge bg-primary fs-6 mt-1">正在加载数据...</div>
   </div>
 
   <!-- 功能标签页导航 -->
@@ -103,15 +103,103 @@
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-  // 本地存储兜底 + 云端数据缓存
+  // 核心：全盘扫描恢复老版本的所有本地数据
   const STORAGE_KEY = 'signal_collision_records';
-  let memoryDB = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-  let pendingRecords = [];
+  let memoryDB = [];
 
-  // 格式清洗：只提取纯数字（去掉括号、空格、横杠、+号）
+  function loadAndMigrateOldData() {
+    let combined = [];
+
+    // 扫描浏览器中所有可能的老版本存储 Key
+    const possibleKeys = [
+      STORAGE_KEY,
+      'collision_records',
+      'chat_records',
+      'records',
+      'phones',
+      'history_data'
+    ];
+
+    possibleKeys.forEach(k => {
+      try {
+        const item = localStorage.getItem(k);
+        if (item) {
+          const parsed = JSON.parse(item);
+          if (Array.isArray(parsed)) {
+            parsed.forEach(p => {
+              if (typeof p === 'string') {
+                combined.push({
+                  raw_phone: p,
+                  clean_digits: cleanToDigits(p),
+                  sender: '历史老数据导入',
+                  time: '历史记录',
+                  quote: p
+                });
+              } else if (typeof p === 'object' && p !== null) {
+                const phoneVal = p.raw_phone || p.phone || p.number || '';
+                combined.push({
+                  raw_phone: phoneVal,
+                  clean_digits: p.clean_digits || cleanToDigits(phoneVal),
+                  sender: p.sender || p.source || '撞车库',
+                  time: p.time || p.create_time || '历史记录',
+                  quote: p.quote || p.full_quote || phoneVal
+                });
+              }
+            });
+          }
+        }
+      } catch (e) {
+        console.error('读取老键出错', e);
+      }
+    });
+
+    // 检查 localStorage 里的全部自定义 key
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!possibleKeys.includes(key)) {
+        try {
+          const val = JSON.parse(localStorage.getItem(key));
+          if (Array.isArray(val) && val.length > 0 && (val[0].number || val[0].phone || typeof val[0] === 'string')) {
+            val.forEach(item => {
+              const p = typeof item === 'string' ? item : (item.number || item.phone || '');
+              if (p) {
+                combined.push({
+                  raw_phone: p,
+                  clean_digits: cleanToDigits(p),
+                  sender: item.source || item.sender || '历史恢复',
+                  time: item.time || '历史记录',
+                  quote: item.quote || p
+                });
+              }
+            });
+          }
+        } catch(e) {}
+      }
+    }
+
+    // 按号码数字去重
+    const uniqueMap = new Map();
+    combined.forEach(rec => {
+      if (rec.clean_digits && !uniqueMap.has(rec.clean_digits)) {
+        uniqueMap.set(rec.clean_digits, rec);
+      }
+    });
+
+    memoryDB = Array.from(uniqueMap.values());
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(memoryDB));
+    updateBadge();
+  }
+
+  function updateBadge() {
+    const badge = document.getElementById('dbCountBadge');
+    if (badge) {
+      badge.innerText = `当前库中已收录: ${memoryDB.length} 个撞车号码`;
+    }
+  }
+
   function cleanToDigits(str) {
     if (!str) return '';
-    return str.replace(/\D/g, '');
+    return String(str).replace(/\D/g, '');
   }
 
   // 1. 查询查重逻辑
@@ -129,7 +217,6 @@
       return;
     }
 
-    // 匹配规则：7位短号、尾号匹配或全匹配
     const hit = memoryDB.find(item => {
       const dbDigits = item.clean_digits;
       if (!dbDigits) return false;
@@ -144,7 +231,7 @@
           <h4 class="text-danger fw-bold mb-3">🚨 撞车警告！该号码之前已被发过！</h4>
           <div class="mb-2 fs-5"><strong>• 查询号码：</strong> <span class="badge bg-danger">${rawInput}</span></div>
           <div class="mb-2"><strong>• 发件人 / 报备人：</strong> <span class="text-primary fw-bold">${hit.sender || '未知'}</span></div>
-          <div class="mb-2"><strong>• 发生时间：</strong> <span class="text-muted">${hit.time || '未知时间'}</span></div>
+          <div class="mb-2"><strong>• 发生时间：</strong> <span class="text-muted">${hit.time || '历史导入'}</span></div>
           <div class="mt-3">
             <div class="small text-muted fw-bold mb-1">原始聊天记录原话：</div>
             <div class="quote-box">${hit.quote || hit.raw_phone}</div>
@@ -184,20 +271,19 @@
 
     memoryDB.unshift(newRecord);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(memoryDB));
+    updateBadge();
 
     statusDiv.innerHTML = `<div class="alert alert-success">✔ 号码 <b>${phone}</b> 已成功录入！当前总库量: ${memoryDB.length}</div>`;
     document.getElementById('singlePhone').value = '';
     document.getElementById('singleQuote').value = '';
   }
 
-  // 3. 通用文本解析器（支持 TXT、WhatsApp 导出、Signal JSONL）
+  let pendingRecords = [];
+
   function parseRawContent(text, defaultSource) {
     const lines = text.split('\n');
     const records = [];
-
-    // 格式识别：[2024/3/3 上午3:29:41] 发送人: 内容
     const chatPattern = /^\[?(\d{4}[-/.]\d{1,2}[-/.]\d{1,2}[^\]]*)\]?\s*([^:]+?):\s*(.*)$/;
-    // 号码正则：识别 (xxx) xxx-xxxx、xxx-xxxx、10/11位等各种格式
     const phonePattern = /(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}|\b\d{3}-\d{4}\b|\b1\d{10}\b/g;
 
     lines.forEach(line => {
@@ -208,7 +294,6 @@
       let sender = defaultSource || '未知';
       let content = trimmed;
 
-      // 如果是 Signal main.jsonl 导出（每行为一个 json 对象）
       if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
         try {
           const jsonItem = JSON.parse(trimmed);
@@ -221,7 +306,6 @@
           content = trimmed;
         }
       } else {
-        // 普通聊天文本识别
         const match = trimmed.match(chatPattern);
         if (match) {
           msgTime = match[1].trim();
@@ -250,14 +334,12 @@
     return records;
   }
 
-  // 处理单文件上传
   function processSingleFile(event) {
     const file = event.target.files[0];
     if (!file) return;
     readFile(file);
   }
 
-  // 处理文件夹上传
   function processFolder(event) {
     const files = event.target.files;
     if (!files || files.length === 0) return;
@@ -287,21 +369,25 @@
     reader.readAsText(file);
   }
 
-  // 批量保存
   function saveBatchRecords() {
     if (pendingRecords.length === 0) return;
     const status = document.getElementById('batchStatus');
     status.innerHTML = '<div class="alert alert-info">正在批量写入...</div>';
 
-    // 去重合并
     memoryDB = pendingRecords.concat(memoryDB);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(memoryDB));
+    updateBadge();
 
     status.innerHTML = `<div class="alert alert-success">🎉 成功导入并存入 <b>${pendingRecords.length}</b> 条记录！当前总库量: ${memoryDB.length}</div>`;
     pendingRecords = [];
     document.getElementById('batchSubmitBtn').disabled = true;
     document.getElementById('batchSubmitBtn').innerText = '开始写入数据库 (待处理: 0 条)';
   }
+
+  // 页面加载时自动执行全盘找回
+  window.onload = function() {
+    loadAndMigrateOldData();
+  };
 </script>
 </body>
 </html>
