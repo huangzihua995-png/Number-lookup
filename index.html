@@ -1,415 +1,81 @@
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Signal 号码文件夹批量追溯与查重系统</title>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <style>
-    :root {
-      --bg: #f8fafc;
-      --card-bg: #ffffff;
-      --border: #e2e8f0;
-      --text: #0f172a;
-      --muted: #64748b;
-      --accent: #2563eb;
-      --danger: #dc2626;
-      --danger-bg: #fef2f2;
-      --success: #16a34a;
-      --success-bg: #f0fdf4;
-      --warning: #d97706;
-      --warning-bg: #fffbeb;
-    }
-    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      padding: 16px;
-      display: flex;
-      justify-content: center;
-    }
-    .container { width: 100%; max-width: 650px; display: flex; flex-direction: column; gap: 16px; }
-    .card {
-      background: var(--card-bg);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 20px;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.04);
-    }
-    .header { display: flex; justify-content: space-between; align-items: center; }
-    h1 { font-size: 1.25rem; font-weight: 700; }
-    h2 { font-size: 1.05rem; margin-bottom: 14px; color: #1e293b; font-weight: 600; }
-    .form-group { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
-    label { font-size: 0.88rem; font-weight: 600; color: #475569; }
-    .input-row { display: flex; gap: 8px; }
-    input[type="text"], input[type="email"], input[type="password"], input[type="date"] {
-      width: 100%;
-      background: #fff;
-      border: 1px solid #cbd5e1;
-      padding: 11px 14px;
-      border-radius: 8px;
-      font-size: 0.95rem;
-      outline: none;
-    }
-    input:focus { border-color: var(--accent); }
+// 1. 单个号码直接录入云端
+async function addSingleNumber() {
+  const number = document.getElementById('singleNumberInput').value.trim();
+  const source = document.getElementById('singleSourceInput').value.trim() || '手动录入';
+  const msgBox = document.getElementById('singleNumberMsg');
+
+  if (!number) {
+    msgBox.innerHTML = '<span class="text-danger">请输入号码！</span>';
+    return;
+  }
+
+  // 格式校验与清洗
+  const cleanNum = number.replace(/[^\d-]/g, '');
+
+  try {
+    msgBox.innerHTML = '<span class="text-info">正在写入云端...</span>';
     
-    /* 文件夹专属拖拽与选择大框 */
-    .folder-dropzone {
-      border: 2px dashed #3b82f6;
-      background: #eff6ff;
-      border-radius: 10px;
-      padding: 28px 16px;
-      text-align: center;
-      cursor: pointer;
-      transition: background 0.2s, border-color 0.2s;
-    }
-    .folder-dropzone:hover {
-      background: #dbeafe;
-      border-color: #2563eb;
-    }
-    .folder-dropzone p {
-      font-size: 1.05rem;
-      font-weight: 700;
-      color: #1d4ed8;
-      margin-bottom: 6px;
-    }
-    .folder-dropzone span {
-      font-size: 0.82rem;
-      color: #64748b;
-    }
-    .folder-dropzone input[type="file"] { display: none; }
-
-    button {
-      background: var(--accent);
-      color: #fff;
-      border: none;
-      padding: 12px 18px;
-      font-size: 0.95rem;
-      font-weight: 600;
-      border-radius: 8px;
-      cursor: pointer;
-    }
-    button.btn-sec { background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; }
-    button:active { opacity: 0.85; }
-    .badge {
-      background: #eff6ff;
-      color: var(--accent);
-      border: 1px solid #bfdbfe;
-      padding: 5px 12px;
-      border-radius: 9999px;
-      font-size: 0.85rem;
-      font-weight: 600;
-    }
-    .result {
-      margin-top: 12px;
-      padding: 14px;
-      border-radius: 8px;
-      display: none;
-      font-size: 0.95rem;
-      line-height: 1.6;
-    }
-    .res-collision { background: var(--danger-bg); border: 1px solid #f87171; color: var(--danger); }
-    .res-safe { background: var(--success-bg); border: 1px solid #4ade80; color: var(--success); }
-    .res-warn { background: var(--warning-bg); border: 1px solid #fcd34d; color: var(--warning); }
-    .hidden { display: none !important; }
-  </style>
-</head>
-<body>
-
-<div class="container">
-
-  <!-- 登录卡片 -->
-  <div id="authSection" class="card">
-    <h2>🔑 用户登录</h2>
-    <div style="display: flex; flex-direction: column; gap: 10px;">
-      <input type="email" id="authEmail" placeholder="输入邮箱账号" />
-      <input type="password" id="authPassword" placeholder="输入密码" />
-      <button id="btnLogin" onclick="handleLogin()">登 录</button>
-      <div id="authFeedback" style="font-size: 0.85rem; color: var(--danger);"></div>
-    </div>
-  </div>
-
-  <!-- 审核中提示 -->
-  <div id="pendingSection" class="card hidden">
-    <div style="color: #854d0e; background: #fefce8; padding: 12px; border-radius: 8px; line-height: 1.5;">
-      ⏳ <strong>账号审核中</strong><br>
-      请联系主控开通权限后刷新。
-    </div>
-    <button class="btn-sec" style="margin-top: 10px;" onclick="handleLogout()">退出</button>
-  </div>
-
-  <!-- 主业务界面 -->
-  <div id="appSection" class="hidden" style="display: flex; flex-direction: column; gap: 16px;">
-    <div class="header">
-      <div>
-        <h1>Signal 号码查重系统</h1>
-        <span id="currentUserEmail" style="font-size: 0.82rem; color: var(--muted);"></span>
-      </div>
-      <div style="display: flex; gap: 8px; align-items: center;">
-        <span class="badge" id="cloudCount">总库统计中...</span>
-        <button class="btn-sec" style="padding: 4px 8px; font-size: 0.8rem;" onclick="handleLogout()">退出</button>
-      </div>
-    </div>
-
-    <!-- 1. 实时查重 -->
-    <div class="card">
-      <h2>🔍 查号码（看之前是否有谁发过）</h2>
-      <div class="input-row">
-        <input type="text" id="checkInput" placeholder="输入要查的号码（格式不限，支持任意格式/末7位）" autofocus />
-        <button onclick="checkPhoneCloud()">查询</button>
-      </div>
-      <div id="checkResult" class="result"></div>
-    </div>
-
-    <!-- 2. 文件夹直接批量导入 -->
-    <div class="card">
-      <h2>📂 文件夹批量直接导入</h2>
-      
-      <div class="form-group">
-        <label>发件人/报备来源（填人名、群名或直接留空）</label>
-        <input type="text" id="ownerInput" placeholder="例如：业务一组、Signal大群（若留空则自动按文件名作为来源）" />
-      </div>
-
-      <div class="form-group">
-        <label>发件/登记日期</label>
-        <input type="date" id="dateInput" />
-      </div>
-
-      <div class="form-group">
-        <label>选择电脑里的文件夹：</label>
-        <div class="folder-dropzone" onclick="document.getElementById('folderInput').click()">
-          <p id="folderPromptTitle">📁 点击这里选择一整个文件夹</p>
-          <span id="folderPromptSub">系统将自动扫描该文件夹内所有文件里的号码并入库</span>
-          <input type="file" id="folderInput" webkitdirectory directory multiple onchange="handleFolderSelect(event)" />
-        </div>
-      </div>
-
-      <button style="width: 100%; padding: 13px; font-size: 1rem;" id="btnUpload" onclick="importFolderToCloud()">🚀 开始自动导入并写入云端 (自动去重)</button>
-      <div id="importMsg" style="margin-top: 10px; font-size: 0.9rem; line-height: 1.5;"></div>
-    </div>
-  </div>
-
-</div>
-
-<script>
-  const SUPABASE_URL = "https://rmssjawaucirihbymali.supabase.co";
-  const SUPABASE_ANON_KEY = "sb_publishable_Ac2hPxtwOeMNBCRNJmGBHw_Xp5pMWRF";
-  const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-  document.getElementById('dateInput').value = new Date().toISOString().split('T')[0];
-  let loadedRecords = [];
-
-  function cleanNum(str) { return (str || '').replace(/\D/g, ''); }
-  function normNum(str) {
-    const c = cleanNum(str);
-    return (c.length === 11 && c.startsWith('1')) ? c.slice(1) : c;
-  }
-  function formatNum(c) {
-    const n = normNum(c);
-    if (n.length === 10) return `+1 (${n.slice(0,3)}) ${n.slice(3,6)}-${n.slice(6)}`;
-    return c;
-  }
-
-  async function initAuth() {
-    const { data: { session } } = await sb.auth.getSession();
-    renderUserState(session);
-    sb.auth.onAuthStateChange((_event, session) => renderUserState(session));
-  }
-
-  async function renderUserState(session) {
-    const authSec = document.getElementById('authSection');
-    const pendSec = document.getElementById('pendingSection');
-    const appSec = document.getElementById('appSection');
-
-    if (!session) {
-      authSec.classList.remove('hidden');
-      pendSec.classList.add('hidden');
-      appSec.classList.add('hidden');
-      return;
-    }
-
-    const { data } = await sb.from('profiles').select('is_approved').eq('id', session.user.id).single();
-
-    if (!data || !data.is_approved) {
-      authSec.classList.add('hidden');
-      pendSec.classList.remove('hidden');
-      appSec.classList.add('hidden');
-    } else {
-      authSec.classList.add('hidden');
-      pendSec.classList.add('hidden');
-      appSec.classList.remove('hidden');
-      document.getElementById('currentUserEmail').innerText = session.user.email;
-      fetchCount();
-    }
-  }
-
-  async function handleLogin() {
-    const email = document.getElementById('authEmail').value.trim();
-    const password = document.getElementById('authPassword').value;
-    const msg = document.getElementById('authFeedback');
-    msg.innerText = '';
-    const { error } = await sb.auth.signInWithPassword({ email, password });
-    if (error) msg.innerText = `登录失败: ${error.message}`;
-  }
-
-  async function handleLogout() {
-    await sb.auth.signOut();
-  }
-
-  // 查询号码
-  async function checkPhoneCloud() {
-    const raw = document.getElementById('checkInput').value.trim();
-    const box = document.getElementById('checkResult');
-    if (!raw) return;
-
-    const norm = normNum(raw);
-    box.style.display = 'block';
-
-    const { data: exactMatches } = await sb
-      .from('phone_records')
-      .select('*')
-      .or(`clean_key.eq.${norm},clean_key.eq.1${norm}`);
-
-    if (exactMatches && exactMatches.length > 0) {
-      const item = exactMatches[0];
-      box.className = 'result res-collision';
-      box.innerHTML = `🚨 <strong>撞车警告！该号码之前已被发过！</strong><br>
-        ------------------------------------<br>
-        • 查重号码：<strong>${raw}</strong><br>
-        • <strong>发件人/报备人</strong>：<span style="font-size:1.05rem; font-weight:bold; color:#b91c1c;">${item.owner}</span><br>
-        • <strong>发件日期</strong>：${item.record_date}<br>
-        • 规范格式：${item.display}`;
-      return;
-    }
-
-    const tail7 = cleanNum(raw).slice(-7);
-    if (tail7.length === 7) {
-      const { data: tailMatches } = await sb
-        .from('phone_records')
-        .select('*')
-        .like('clean_key', `%${tail7}`);
-
-      if (tailMatches && tailMatches.length > 0) {
-        const item = tailMatches[0];
-        box.className = 'result res-warn';
-        box.innerHTML = `⚠️ <strong>疑似重复（末 7 位相同）！</strong><br>
-          • 库内发件人：<strong>${item.owner}</strong> (${item.record_date})<br>
-          • 库内号码：${item.display}`;
-        return;
-      }
-    }
-
-    box.className = 'result res-safe';
-    box.innerHTML = `✅ <strong>该号码从未被登记过</strong>，可以正常使用。`;
-  }
-
-  document.getElementById('checkInput').addEventListener('keydown', e => {
-    if (e.key === 'Enter') checkPhoneCloud();
-  });
-
-  // 读取整个文件夹逻辑
-  async function handleFolderSelect(event) {
-    const files = event.target.files;
-    if (!files || files.length === 0) return;
-
-    loadedRecords = [];
-    document.getElementById('folderPromptTitle').innerText = `⏳ 正在读取文件夹中的 ${files.length} 个文件...`;
-    document.getElementById('folderPromptSub').innerText = `正在提取号码，请稍候...`;
-
-    const regex = /(?:\+?1[-.\s]?)?(?:\(?\d{3}\)?[-.\s]?)?\d{3}[-.\s]?\d{4}\b|\b1\d{10}\b/g;
-    let validFilesCount = 0;
-
-    for (let file of files) {
-      try {
-        const text = await file.text();
-        const matches = text.match(regex);
-        if (matches && matches.length > 0) {
-          validFilesCount++;
-          const defaultSource = file.name.replace(/\.[^/.]+$/, "");
-          matches.forEach(item => {
-            const cleaned = cleanNum(item);
-            if (cleaned.length >= 7 && cleaned.length <= 12) {
-              loadedRecords.push({
-                clean_key: normNum(cleaned),
-                display: formatNum(cleaned),
-                fileSource: defaultSource
-              });
-            }
-          });
-        }
-      } catch (err) {
-        console.warn("文件读取跳过:", file.name);
-      }
-    }
-
-    document.getElementById('folderPromptTitle').innerText = `✅ 成功扫描 ${validFilesCount} 个文件！`;
-    document.getElementById('folderPromptSub').innerText = `共提取出 ${loadedRecords.length} 条号码数据。点击下方蓝色按钮即可存入！`;
-  }
-
-  // 批量入库写入云端
-  async function importFolderToCloud() {
-    const msg = document.getElementById('importMsg');
-    const customOwner = document.getElementById('ownerInput').value.trim();
-    const date = document.getElementById('dateInput').value || new Date().toISOString().split('T')[0];
-
-    if (!loadedRecords || loadedRecords.length === 0) {
-      msg.style.color = '#dc2626';
-      msg.innerText = '⚠️ 请先点击上方虚线框选择包含号码文件的文件夹！';
-      return;
-    }
-
-    msg.style.color = '#2563eb';
-    msg.innerText = `⏳ 正在比对去重并批量写入云端数据库（待入库 ${loadedRecords.length} 条）...`;
-
-    // 本地快速去重
-    const map = new Map();
-    loadedRecords.forEach(r => {
-      if (!map.has(r.clean_key)) {
-        map.set(r.clean_key, {
-          clean_key: r.clean_key,
-          display: r.display,
-          owner: customOwner || r.fileSource,
-          record_date: date
-        });
-      }
-    });
-
-    const payload = Array.from(map.values());
-    const chunkSize = 500;
-    let successCount = 0;
-
-    for (let i = 0; i < payload.length; i += chunkSize) {
-      const slice = payload.slice(i, i + chunkSize);
-      const { error } = await sb
-        .from('phone_records')
-        .upsert(slice, { onConflict: 'clean_key', ignoreDuplicates: true });
-
-      if (error) {
-        msg.style.color = '#dc2626';
-        msg.innerText = `入库中断: ${error.message}`;
-        return;
-      }
-      successCount += slice.length;
-    }
-
-    loadedRecords = [];
-    document.getElementById('folderPromptTitle').innerText = '📁 点击这里选择一整个文件夹';
-    document.getElementById('folderPromptSub').innerText = '系统将自动扫描该文件夹内所有文件里的号码并入库';
+    // 调用你的云数据库写入接口（以你的数据库逻辑为准）
+    await saveToDatabase([{ number: cleanNum, source: source, create_time: new Date().toISOString() }]);
     
-    msg.style.color = '#16a34a';
-    msg.innerHTML = `🎉 <strong>批量导入完成！</strong><br>成功入库 <strong>${payload.length}</strong> 个有效唯一号码，已自动同步至云端总库！`;
-    fetchCount();
+    msgBox.innerHTML = `<span class="text-success">✔ 号码 ${cleanNum} 已成功入库！</span>`;
+    document.getElementById('singleNumberInput').value = '';
+  } catch (err) {
+    msgBox.innerHTML = `<span class="text-danger">录入失败: ${err.message}</span>`;
+  }
+}
+
+// 2. 临时存储从单文件解析出的号码列表
+let parsedBatchData = [];
+
+// 3. 处理单文件上传 (.txt, .jsonl, .csv)
+function handleSingleFile(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const statusMsg = document.getElementById('batchStatusMsg');
+  statusMsg.innerText = `正在读取文件: ${file.name}...`;
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const content = e.target.result;
+    
+    // 正则提取所有符合规则的号码：支持 xxx-xxxx 短号、10位、11位等纯数字
+    const regex = /(?:\b\d{3}-\d{4}\b|\b1\d{10}\b|\b\d{10,11}\b)/g;
+    const matches = content.match(regex) || [];
+    
+    // 数组去重
+    const uniqueNumbers = [...new Set(matches)];
+    
+    parsedBatchData = uniqueNumbers;
+    statusMsg.innerHTML = `<span class="text-success">成功识别到 <b>${uniqueNumbers.length}</b> 个有效号码，点击下方按钮即可写入云端。</span>`;
+  };
+  reader.readAsText(file);
+}
+
+// 4. 批量提交到云端
+async function submitBatchToCloud() {
+  const source = document.getElementById('batchSourceInput').value.trim() || '批量导入';
+  const statusMsg = document.getElementById('batchStatusMsg');
+
+  if (parsedBatchData.length === 0) {
+    alert('暂无解析出的号码，请先选择文件！');
+    return;
   }
 
-  async function fetchCount() {
-    const { count } = await sb.from('phone_records').select('*', { count: 'exact', head: true });
-    if (count !== null) {
-      document.getElementById('cloudCount').innerText = `总库记录：${count} 条`;
-    }
-  }
+  statusMsg.innerHTML = `<span class="text-info">正在批量写入 ${parsedBatchData.length} 个号码到云端，请稍候...</span>`;
 
-  initAuth();
-</script>
-</body>
-</html>
+  try {
+    const payload = parsedBatchData.map(num => ({
+      number: num,
+      source: source,
+      create_time: new Date().toISOString()
+    }));
+
+    await saveToDatabase(payload);
+    statusMsg.innerHTML = `<span class="text-success">🎉 写入完成！共入库 ${parsedBatchData.length} 条记录。</span>`;
+    parsedBatchData = [];
+  } catch (err) {
+    statusMsg.innerHTML = `<span class="text-danger">写入出错: ${err.message}</span>`;
+  }
+}
